@@ -176,13 +176,13 @@ export declare function listHistory(userId: string, filters?: {
                 id: string;
                 status: import("@prisma/client").$Enums.StationStatus;
                 createdAt: Date;
-                operatorId: string;
                 latitude: number;
                 longitude: number;
                 address: string;
                 operatingHours: string;
                 amenities: string[];
                 rating: number | null;
+                operatorId: string;
             };
         } & {
             type: import("@prisma/client").$Enums.ConnectorType;
