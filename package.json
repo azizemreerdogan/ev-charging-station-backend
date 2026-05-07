@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "prisma migrate deploy && node dist/main.js",
-    "build": "prisma generate && tsc",
+    "build": "prisma generate && tsc && node scripts/copy-admin-ui.js",
     "postinstall": "prisma generate",
     "test": "vitest run",
     "db:generate": "prisma generate",
