@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EV Charging — Admin</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --line: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --yellow: #facc15;
+    --red: #ef4444;
+    --danger: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; background: #0ea5e9; color: white;
+  }
+  main { padding: 24px; max-width: 1280px; margin: 0 auto; }
+  nav { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  nav button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  nav button.active { background: var(--accent); color: #0c1929; border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th { background: #0b1220; color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 11px; }
+  tbody tr:hover { background: #243349; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  input, select {
+    background: #0b1220; color: var(--text); border: 1px solid var(--line);
+    padding: 7px 10px; border-radius: 6px; font-size: 13px;
+  }
+  button.action {
+    background: #0ea5e9; color: white; border: none; padding: 5px 10px;
+    border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 4px;
+  }
+  button.action.danger { background: var(--danger); }
+  button.action.warn { background: #ca8a04; }
+  button.action:hover { opacity: 0.85; }
+  .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .status.ACTIVE, .status.AVAILABLE, .status.COMPLETED { background: #064e3b; color: #6ee7b7; }
+  .status.SUSPENDED, .status.MAINTENANCE, .status.RESERVED, .status.PENDING { background: #713f12; color: #fde68a; }
+  .status.DEACTIVATED, .status.OFFLINE, .status.ERROR, .status.FAILED, .status.STOPPED { background: #7f1d1d; color: #fca5a5; }
+  .status.IN_USE { background: #1e3a8a; color: #93c5fd; }
+  .status.ARREARS { background: #5b21b6; color: #c4b5fd; }
+  .login-card {
+    max-width: 360px; margin: 80px auto; padding: 32px; background: var(--panel);
+    border-radius: 12px; border: 1px solid var(--line);
+  }
+  .login-card h2 { margin-top: 0; }
+  .login-card input { width: 100%; margin-bottom: 12px; }
+  .login-card button {
+    width: 100%; padding: 10px; background: var(--accent); color: #0c1929;
+    border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+  }
+  .err { color: #fca5a5; font-size: 13px; margin-top: 8px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat {
+    background: var(--panel); padding: 16px; border-radius: 8px; border: 1px solid var(--line);
+  }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 6px; color: var(--accent); }
+  .pager { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .pager button { padding: 6px 12px; }
+  .empty { padding: 24px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const API = "/api/v1";
+
+const state = {
+  token: localStorage.getItem("admin_token") || null,
+  user: JSON.parse(localStorage.getItem("admin_user") || "null"),
+  tab: "overview",
+  page: 1,
+};
+
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  if (state.token) headers["Authorization"] = "Bearer " + state.token;
+  const res = await fetch(API + path, { ...opts, headers });
+  if (res.status === 401) { logout(); throw new Error("Unauthorized"); }
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(body.message || res.statusText);
+  return body;
+}
+
+function logout() {
+  state.token = null; state.user = null;
+  localStorage.removeItem("admin_token"); localStorage.removeItem("admin_user");
+  render();
+}
+
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== null && v !== undefined) e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    e.appendChild(typeof c === "string" || typeof c === "number" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function statusPill(s) { return el("span", { class: "status " + s }, s); }
+
+// ---- Login ----
+function renderLogin(errMsg) {
+  const card = el("div", { class: "login-card" },
+    el("h2", {}, "Admin Sign In"),
+    el("input", { id: "email", type: "email", placeholder: "Email" }),
+    el("input", { id: "password", type: "password", placeholder: "Password" }),
+    el("button", {
+      onclick: async () => {
+        try {
+          const r = await api("/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              email: document.getElementById("email").value,
+              password: document.getElementById("password").value,
+            }),
+          });
+          if (r.user.role !== "ADMIN" && r.user.role !== "OPERATOR") {
+            throw new Error("Account does not have admin or operator access");
+          }
+          state.token = r.token;
+          state.user = r.user;
+          localStorage.setItem("admin_token", state.token);
+          localStorage.setItem("admin_user", JSON.stringify(state.user));
+          render();
+        } catch (e) { renderLogin(e.message); }
+      },
+    }, "Sign in"),
+    errMsg ? el("div", { class: "err" }, errMsg) : null,
+  );
+  document.getElementById("app").replaceChildren(card);
+}
+
+// ---- Overview / Analytics ----
+async function renderOverview(container) {
+  container.replaceChildren(el("div", { class: "empty" }, "Loading..."));
+  try {
+    const o = await api("/admin/analytics/overview");
+    const stats = el("div", { class: "stats" },
+      stat("Active sessions", o.activeSessions),
+      stat("Today's reservations", o.todayReservations),
+      stat("Today's revenue", "$" + Number(o.todayRevenue).toFixed(2)),
+      stat("Today's invoices", o.todayInvoiceCount),
+      stat("Payment success (7d)", o.paymentSuccessRate7d === null ? "—" : (o.paymentSuccessRate7d * 100).toFixed(1) + "%"),
+      stat("Stations", o.totalStations),
+      stat("Connectors", o.totalConnectors),
+    );
+    const stationsResp = await api("/admin/analytics/stations");
+    const tbl = el("table", {},
+      el("thead", {}, el("tr", {},
+        ...["Station", "Connectors", "Sessions", "kWh", "Revenue"].map(h => el("th", {}, h))
+      )),
+      el("tbody", {}, ...stationsResp.stations.map(s => el("tr", {},
+        el("td", {}, s.name),
+        el("td", {}, String(s.connectorCount)),
+        el("td", {}, String(s.sessionCount)),
+        el("td", {}, Number(s.kwhDelivered).toFixed(2)),
+        el("td", {}, "$" + Number(s.revenue).toFixed(2)),
+      ))),
+    );
+    container.replaceChildren(stats, el("h3", {}, "Per-station performance"), tbl);
+  } catch (e) { container.replaceChildren(el("div", { class: "err" }, e.message)); }
+}
+function stat(label, value) {
+  return el("div", { class: "stat" },
+    el("div", { class: "label" }, label),
+    el("div", { class: "value" }, String(value)),
+  );
+}
+
+// ---- Users ----
+async function renderUsers(container) {
+  if (state.user.role !== "ADMIN") {
+    container.replaceChildren(el("div", { class: "empty" }, "Users are managed by ADMIN only."));
+    return;
+  }
+  let q = "", role = "", status = "", page = 1;
+  async function refresh() {
+    container.replaceChildren(el("div", { class: "empty" }, "Loading..."));
+    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+    if (q) params.set("q", q);
+    if (role) params.set("role", role);
+    if (status) params.set("status", status);
+    try {
+      const r = await api("/admin/users?" + params);
+      const filt = el("div", { class: "toolbar" },
+        el("input", { placeholder: "Search email/name", value: q, oninput: e => { q = e.target.value; } }),
+        roleSelect(role, v => { role = v; }),
+        statusSelect(["ACTIVE","SUSPENDED","DEACTIVATED","ARREARS"], status, v => { status = v; }),
+        el("button", { class: "action", onclick: () => { page = 1; refresh(); } }, "Search"),
+      );
+      const tbl = el("table", {},
+        el("thead", {}, el("tr", {},
+          ...["Email","Name","Role","Status","Vehicles","Sessions","Actions"].map(h => el("th", {}, h))
+        )),
+        el("tbody", {}, ...r.items.map(u => el("tr", {},
+          el("td", {}, u.email),
+          el("td", {}, u.name),
+          el("td", {}, u.role),
+          el("td", {}, statusPill(u.status)),
+          el("td", {}, String(u._count.vehicles)),
+          el("td", {}, String(u._count.sessions)),
+          el("td", {},
+            u.status === "ACTIVE"
+              ? actionBtn("Suspend", "warn", () => patchUser(u.id, { status: "SUSPENDED" }, refresh))
+              : actionBtn("Reactivate", "", () => patchUser(u.id, { status: "ACTIVE" }, refresh)),
+            u.status !== "DEACTIVATED"
+              ? actionBtn("Deactivate", "danger", () => {
+                  if (confirm("Deactivate " + u.email + "?")) patchUser(u.id, { status: "DEACTIVATED" }, refresh);
+                })
+              : null,
+          ),
+        ))),
+      );
+      container.replaceChildren(filt, tbl, pager(r, page, n => { page = n; refresh(); }));
+    } catch (e) { container.replaceChildren(el("div", { class: "err" }, e.message)); }
+  }
+  refresh();
+}
+function roleSelect(value, onChange) {
+  const sel = el("select", { onchange: e => onChange(e.target.value) },
+    el("option", { value: "" }, "All roles"),
+    ...["VEHICLE_OWNER","OPERATOR","ADMIN"].map(r => el("option", { value: r }, r)),
+  );
+  sel.value = value;
+  return sel;
+}
+function statusSelect(opts, value, onChange) {
+  const sel = el("select", { onchange: e => onChange(e.target.value) },
+    el("option", { value: "" }, "All statuses"),
+    ...opts.map(s => el("option", { value: s }, s)),
+  );
+  sel.value = value;
+  return sel;
+}
+async function patchUser(id, body, after) {
+  try { await api("/admin/users/" + id, { method: "PATCH", body: JSON.stringify(body) }); after(); }
+  catch (e) { alert(e.message); }
+}
+function actionBtn(label, kind, onclick) {
+  return el("button", { class: "action " + kind, onclick }, label);
+}
+function pager(r, page, go) {
+  const totalPages = Math.max(1, Math.ceil(r.total / r.pageSize));
+  return el("div", { class: "pager" },
+    el("button", { class: "action", disabled: page <= 1, onclick: () => go(page - 1) }, "Prev"),
+    el("span", {}, "Page " + page + " of " + totalPages + " (" + r.total + " total)"),
+    el("button", { class: "action", disabled: page >= totalPages, onclick: () => go(page + 1) }, "Next"),
+  );
+}
+
+// ---- Stations ----
+async function renderStations(container) {
+  let page = 1;
+  async function refresh() {
+    container.replaceChildren(el("div", { class: "empty" }, "Loading..."));
+    try {
+      const r = await api("/admin/stations?page=" + page + "&pageSize=20");
+      const tbl = el("table", {},
+        el("thead", {}, el("tr", {},
+          ...["Name","Address","Status","Operator","Connectors (avail/use/off)","Actions"].map(h => el("th", {}, h))
+        )),
+        el("tbody", {}, ...r.items.map(s => el("tr", {},
+          el("td", {}, s.name),
+          el("td", {}, s.address),
+          el("td", {}, statusPill(s.status)),
+          el("td", {}, s.operator ? s.operator.email : "—"),
+          el("td", {},
+            s.totalConnectors + " (",
+            el("span", { style: "color:var(--green)" }, String(s.availableConnectors)), "/",
+            el("span", { style: "color:#93c5fd" }, String(s.inUseConnectors)), "/",
+            el("span", { style: "color:#fca5a5" }, String(s.offlineConnectors)), ")"),
+          el("td", {},
+            actionBtn("Connectors", "", () => openConnectorPanel(s.id, s.name)),
+            s.status === "ACTIVE"
+              ? actionBtn("Maintenance", "warn", () => patchStation(s.id, { status: "MAINTENANCE" }, refresh))
+              : actionBtn("Activate", "", () => patchStation(s.id, { status: "ACTIVE" }, refresh)),
+          ),
+        ))),
+      );
+      container.replaceChildren(tbl, pager(r, page, n => { page = n; refresh(); }));
+    } catch (e) { container.replaceChildren(el("div", { class: "err" }, e.message)); }
+  }
+  refresh();
+}
+async function patchStation(id, body, after) {
+  try { await api("/admin/stations/" + id, { method: "PATCH", body: JSON.stringify(body) }); after(); }
+  catch (e) { alert(e.message); }
+}
+async function openConnectorPanel(stationId, stationName) {
+  const main = document.getElementById("main");
+  const back = el("button", { class: "action", onclick: () => render() }, "← Back to stations");
+  const list = el("div", {});
+  main.replaceChildren(back, el("h2", {}, "Connectors — " + stationName), list);
+  async function refresh() {
+    list.replaceChildren(el("div", { class: "empty" }, "Loading..."));
+    try {
+      const items = await api("/admin/stations/" + stationId + "/connectors");
+      const tbl = el("table", {},
+        el("thead", {}, el("tr", {},
+          ...["#","Type","Power kW","$/kWh","Status","Actions"].map(h => el("th", {}, h))
+        )),
+        el("tbody", {}, ...items.map(c => el("tr", {},
+          el("td", {}, String(c.connectorNumber)),
+          el("td", {}, c.type),
+          el("td", {}, String(c.powerKw)),
+          el("td", {}, c.pricePerKwh),
+          el("td", {}, statusPill(c.status)),
+          el("td", {},
+            c.status !== "MAINTENANCE"
+              ? actionBtn("Maintenance", "warn", () => patchConnector(c.id, { status: "MAINTENANCE" }, refresh)) : null,
+            c.status !== "AVAILABLE"
+              ? actionBtn("Available", "", () => patchConnector(c.id, { status: "AVAILABLE" }, refresh)) : null,
+            c.status !== "OFFLINE"
+              ? actionBtn("Offline", "danger", () => patchConnector(c.id, { status: "OFFLINE" }, refresh)) : null,
+            actionBtn("Delete", "danger", () => {
+              if (confirm("Delete connector " + c.connectorNumber + "?")) deleteConnector(c.id, refresh);
+            }),
+          ),
+        ))),
+      );
+      const form = el("div", { class: "toolbar" },
+        el("input", { id: "cn", type: "number", placeholder: "Number", min: "1" }),
+        el("select", { id: "ct" }, ...["TYPE_1","TYPE_2","CCS","CHADEMO","TESLA"].map(t => el("option", { value: t }, t))),
+        el("input", { id: "cp", type: "number", placeholder: "Power kW", min: "1" }),
+        el("input", { id: "pr", type: "number", placeholder: "$/kWh", step: "0.01", min: "0" }),
+        el("button", { class: "action", onclick: async () => {
+          const body = {
+            connectorNumber: Number(document.getElementById("cn").value),
+            type: document.getElementById("ct").value,
+            powerKw: Number(document.getElementById("cp").value),
+            pricePerKwh: Number(document.getElementById("pr").value),
+          };
+          try { await api("/admin/stations/" + stationId + "/connectors", { method: "POST", body: JSON.stringify(body) }); refresh(); }
+          catch (e) { alert(e.message); }
+        } }, "Add connector"),
+      );
+      list.replaceChildren(tbl, el("h3", {}, "Add connector"), form);
+    } catch (e) { list.replaceChildren(el("div", { class: "err" }, e.message)); }
+  }
+  refresh();
+}
+async function patchConnector(id, body, after) {
+  try { await api("/admin/connectors/" + id, { method: "PATCH", body: JSON.stringify(body) }); after(); }
+  catch (e) { alert(e.message); }
+}
+async function deleteConnector(id, after) {
+  try { await api("/admin/connectors/" + id, { method: "DELETE" }); after(); }
+  catch (e) { alert(e.message); }
+}
+
+// ---- Sessions ----
+async function renderSessions(container) {
+  let page = 1, status = "";
+  async function refresh() {
+    container.replaceChildren(el("div", { class: "empty" }, "Loading..."));
+    const params = new URLSearchParams({ page: String(page), pageSize: "20" });
+    if (status) params.set("status", status);
+    try {
+      const r = await api("/admin/sessions?" + params);
+      const filt = el("div", { class: "toolbar" },
+        statusSelect(["ACTIVE","COMPLETED","STOPPED","ERROR"], status, v => { status = v; }),
+        el("button", { class: "action", onclick: () => { page = 1; refresh(); } }, "Filter"),
+      );
+      const tbl = el("table", {},
+        el("thead", {}, el("tr", {},
+          ...["Started","User","Vehicle","Station","Connector","kWh","Cost","Pay","Status","Actions"].map(h => el("th", {}, h))
+        )),
+        el("tbody", {}, ...r.items.map(s => el("tr", {},
+          el("td", {}, new Date(s.startTime).toLocaleString()),
+          el("td", {}, s.user?.email || "—"),
+          el("td", {}, s.vehicle ? (s.vehicle.make + " " + s.vehicle.model) : "—"),
+          el("td", {}, s.connector?.station?.name || "—"),
+          el("td", {}, s.connector ? ("#" + s.connector.connectorNumber + " " + s.connector.type) : "—"),
+          el("td", {}, s.energyKwh != null ? Number(s.energyKwh).toFixed(2) : "—"),
+          el("td", {}, s.costAmount ? "$" + Number(s.costAmount).toFixed(2) : "—"),
+          el("td", {}, s.paymentStatus ? statusPill(s.paymentStatus) : "—"),
+          el("td", {}, statusPill(s.status)),
+          el("td", {},
+            s.status === "ACTIVE"
+              ? actionBtn("Emergency stop", "danger", () => {
+                  if (confirm("Emergency-stop this session?")) emergencyStop(s.id, refresh);
+                })
+              : null,
+          ),
+        ))),
+      );
+      container.replaceChildren(filt, tbl, pager(r, page, n => { page = n; refresh(); }));
+    } catch (e) { container.replaceChildren(el("div", { class: "err" }, e.message)); }
+  }
+  refresh();
+}
+async function emergencyStop(id, after) {
+  try { await api("/admin/sessions/" + id + "/emergency-stop", { method: "POST" }); after(); }
+  catch (e) { alert(e.message); }
+}
+
+// ---- Layout ----
+function render() {
+  if (!state.token || !state.user) return renderLogin();
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "stations", label: "Stations" },
+    { id: "sessions", label: "Sessions" },
+  ];
+  if (state.user.role === "ADMIN") tabs.splice(1, 0, { id: "users", label: "Users" });
+
+  const main = el("main", { id: "main" });
+  const container = el("div", {});
+  main.appendChild(container);
+
+  const navEl = el("nav", {}, ...tabs.map(t =>
+    el("button", {
+      class: state.tab === t.id ? "active" : "",
+      onclick: () => { state.tab = t.id; render(); },
+    }, t.label),
+  ));
+  main.insertBefore(navEl, container);
+
+  const header = el("header", {},
+    el("h1", {}, "EV Charging — Admin Console"),
+    el("div", {},
+      el("span", { class: "pill" }, state.user.role),
+      " ",
+      el("span", { style: "color:var(--muted);font-size:13px;margin:0 12px" }, state.user.email),
+      el("button", { class: "action danger", onclick: logout }, "Sign out"),
+    ),
+  );
+
+  document.getElementById("app").replaceChildren(header, main);
+
+  if (state.tab === "overview") renderOverview(container);
+  else if (state.tab === "users") renderUsers(container);
+  else if (state.tab === "stations") renderStations(container);
+  else if (state.tab === "sessions") renderSessions(container);
+}
+
+render();
+</script>
+</body>
+</html>

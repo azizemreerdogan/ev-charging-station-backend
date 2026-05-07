@@ -13,7 +13,7 @@ export async function registerUser(input: RegisterBody) {
                 passwordHash,
                 name: input.name,
                 phone: input.phone ?? null,
-                role: input.role,
+                role: "VEHICLE_OWNER",
             },
         });
         return user;

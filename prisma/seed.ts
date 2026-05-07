@@ -5,6 +5,18 @@ const prisma = new PrismaClient();
 
 async function main() {
     const passwordHash = await argon2.hash("password123");
+    const adminPasswordHash = await argon2.hash("admin123");
+
+    await prisma.user.upsert({
+        where: { email: "admin@evcharge.dev" },
+        update: { passwordHash: adminPasswordHash, role: "ADMIN" },
+        create: {
+            email: "admin@evcharge.dev",
+            passwordHash: adminPasswordHash,
+            name: "System Administrator",
+            role: "ADMIN",
+        },
+    });
 
     const operator = await prisma.user.upsert({
         where: { email: "operator@greencharge.dev" },
@@ -115,6 +127,7 @@ async function main() {
     }
 
     console.log("Seed complete:");
+    console.log("  admin login:    admin@evcharge.dev / admin123");
     console.log("  operator login: operator@greencharge.dev / password123");
     console.log("  owner login:    owner@example.dev / password123");
 }
