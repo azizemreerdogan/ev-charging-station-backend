@@ -22,6 +22,15 @@ export const userPatchSchema = z
 export const stationListQuerySchema = paginationSchema.extend({
     status: z.enum(["ACTIVE", "MAINTENANCE", "OFFLINE"]).optional(),
 });
+export const stationCreateSchema = z.object({
+    name: z.string().min(1).max(120),
+    address: z.string().min(3).max(255),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    operatingHours: z.string().min(1).max(120).optional(),
+    amenities: z.array(z.string().max(40)).max(20).optional(),
+    operatorId: z.string().uuid().optional(),
+});
 export const stationPatchSchema = z
     .object({
     name: z.string().min(1).max(120).optional(),

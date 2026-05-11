@@ -44,6 +44,15 @@ export declare const stationListQuerySchema: z.ZodObject<{
         OFFLINE: "OFFLINE";
     }>>;
 }, z.core.$strip>;
+export declare const stationCreateSchema: z.ZodObject<{
+    name: z.ZodString;
+    address: z.ZodString;
+    latitude: z.ZodNumber;
+    longitude: z.ZodNumber;
+    operatingHours: z.ZodOptional<z.ZodString>;
+    amenities: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    operatorId: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const stationPatchSchema: z.ZodObject<{
     name: z.ZodOptional<z.ZodString>;
     address: z.ZodOptional<z.ZodString>;

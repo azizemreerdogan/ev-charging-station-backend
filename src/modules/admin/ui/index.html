@@ -327,10 +327,42 @@ async function renderStations(container) {
           ),
         ))),
       );
-      container.replaceChildren(tbl, pager(r, page, n => { page = n; refresh(); }));
+      const form = renderStationCreateForm(refresh);
+      container.replaceChildren(tbl, pager(r, page, n => { page = n; refresh(); }), el("h3", {}, "Add station"), form);
     } catch (e) { container.replaceChildren(el("div", { class: "err" }, e.message)); }
   }
   refresh();
+}
+function renderStationCreateForm(after) {
+  const isAdmin = state.user && state.user.role === "ADMIN";
+  const fields = [
+    el("input", { id: "snm", type: "text", placeholder: "Name" }),
+    el("input", { id: "sad", type: "text", placeholder: "Address" }),
+    el("input", { id: "slt", type: "number", placeholder: "Latitude", step: "0.000001" }),
+    el("input", { id: "sln", type: "number", placeholder: "Longitude", step: "0.000001" }),
+    el("input", { id: "soh", type: "text", placeholder: "Operating hours (default 24/7)" }),
+    el("input", { id: "sam", type: "text", placeholder: "Amenities (comma-separated)" }),
+  ];
+  if (isAdmin) {
+    fields.push(el("input", { id: "sop", type: "text", placeholder: "Operator user ID (UUID)" }));
+  }
+  fields.push(el("button", { class: "action", onclick: async () => {
+    const amRaw = document.getElementById("sam").value.trim();
+    const ohRaw = document.getElementById("soh").value.trim();
+    const opRaw = isAdmin ? document.getElementById("sop").value.trim() : "";
+    const body = {
+      name: document.getElementById("snm").value.trim(),
+      address: document.getElementById("sad").value.trim(),
+      latitude: Number(document.getElementById("slt").value),
+      longitude: Number(document.getElementById("sln").value),
+      ...(ohRaw ? { operatingHours: ohRaw } : {}),
+      ...(amRaw ? { amenities: amRaw.split(",").map(s => s.trim()).filter(Boolean) } : {}),
+      ...(opRaw ? { operatorId: opRaw } : {}),
+    };
+    try { await api("/admin/stations", { method: "POST", body: JSON.stringify(body) }); after(); }
+    catch (e) { alert(e.message); }
+  } }, "Create station"));
+  return el("div", { class: "toolbar" }, ...fields);
 }
 async function patchStation(id, body, after) {
   try { await api("/admin/stations/" + id, { method: "PATCH", body: JSON.stringify(body) }); after(); }
