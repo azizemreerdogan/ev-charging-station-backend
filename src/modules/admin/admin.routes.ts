@@ -6,6 +6,7 @@ import {
     connectorPatchSchema,
     idParamSchema,
     sessionListQuerySchema,
+    stationCreateSchema,
     stationListQuerySchema,
     stationPatchSchema,
     userListQuerySchema,
@@ -53,6 +54,17 @@ export async function adminRoutes(app: FastifyInstance) {
             schema: { querystring: stationListQuerySchema, tags: ["admin"] },
         },
         async (req) => svc.listStations(actor(req), req.query),
+    );
+    r.post(
+        "/stations",
+        {
+            ...guard,
+            schema: { body: stationCreateSchema, tags: ["admin"] },
+        },
+        async (req, reply) => {
+            const s = await svc.createStation(actor(req), req.body);
+            return reply.code(201).send(s);
+        },
     );
     r.patch(
         "/stations/:id",

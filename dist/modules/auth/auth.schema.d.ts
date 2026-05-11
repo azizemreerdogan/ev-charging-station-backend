@@ -9,11 +9,6 @@ export declare const registerBodySchema: z.ZodObject<{
     password: z.ZodString;
     name: z.ZodString;
     phone: z.ZodOptional<z.ZodString>;
-    role: z.ZodDefault<z.ZodEnum<{
-        VEHICLE_OWNER: "VEHICLE_OWNER";
-        OPERATOR: "OPERATOR";
-        ADMIN: "ADMIN";
-    }>>;
 }, z.core.$strip>;
 export declare const loginBodySchema: z.ZodObject<{
     email: z.ZodString;

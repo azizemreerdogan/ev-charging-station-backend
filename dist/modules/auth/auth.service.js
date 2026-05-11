@@ -11,7 +11,7 @@ export async function registerUser(input) {
                 passwordHash,
                 name: input.name,
                 phone: input.phone ?? null,
-                role: input.role,
+                role: "VEHICLE_OWNER",
             },
         });
         return user;

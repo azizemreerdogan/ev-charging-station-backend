@@ -1,4 +1,4 @@
-import { analyticsRangeQuerySchema, connectorCreateSchema, connectorPatchSchema, idParamSchema, sessionListQuerySchema, stationListQuerySchema, stationPatchSchema, userListQuerySchema, userPatchSchema, } from "./admin.schemas.js";
+import { analyticsRangeQuerySchema, connectorCreateSchema, connectorPatchSchema, idParamSchema, sessionListQuerySchema, stationCreateSchema, stationListQuerySchema, stationPatchSchema, userListQuerySchema, userPatchSchema, } from "./admin.schemas.js";
 import * as svc from "./admin.service.js";
 function actor(req) {
     return { userId: req.currentUser.sub, role: req.currentUser.role };
@@ -22,6 +22,13 @@ export async function adminRoutes(app) {
         ...guard,
         schema: { querystring: stationListQuerySchema, tags: ["admin"] },
     }, async (req) => svc.listStations(actor(req), req.query));
+    r.post("/stations", {
+        ...guard,
+        schema: { body: stationCreateSchema, tags: ["admin"] },
+    }, async (req, reply) => {
+        const s = await svc.createStation(actor(req), req.body);
+        return reply.code(201).send(s);
+    });
     r.patch("/stations/:id", {
         ...guard,
         schema: {

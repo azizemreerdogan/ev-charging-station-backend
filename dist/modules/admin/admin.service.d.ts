@@ -82,6 +82,27 @@ export declare function listStations(actor: Actor, filters: {
     page: number;
     pageSize: number;
 }>;
+export declare function createStation(actor: Actor, body: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    operatingHours?: string;
+    amenities?: string[];
+    operatorId?: string;
+}): Promise<{
+    name: string;
+    id: string;
+    status: import("@prisma/client").$Enums.StationStatus;
+    createdAt: Date;
+    latitude: number;
+    longitude: number;
+    address: string;
+    operatingHours: string;
+    amenities: string[];
+    rating: number | null;
+    operatorId: string;
+}>;
 export declare function patchStation(actor: Actor, id: string, patch: {
     name?: string;
     address?: string;

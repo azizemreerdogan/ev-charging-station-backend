@@ -1,11 +1,12 @@
 import { z } from "zod";
 export const userRoleEnum = z.enum(["VEHICLE_OWNER", "OPERATOR", "ADMIN"]);
+// Public registration always creates a VEHICLE_OWNER. Privileged roles
+// (OPERATOR, ADMIN) are assigned by an existing ADMIN via PATCH /admin/users/:id.
 export const registerBodySchema = z.object({
     email: z.string().email().max(255),
     password: z.string().min(8).max(128),
     name: z.string().min(2).max(100),
     phone: z.string().max(32).optional(),
-    role: userRoleEnum.default("VEHICLE_OWNER"),
 });
 export const loginBodySchema = z.object({
     email: z.string().email(),
