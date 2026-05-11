@@ -87,6 +87,25 @@
 
 <script>
 const API = "/api/v1";
+const GOOGLE_MAPS_API_KEY = "__GOOGLE_MAPS_API_KEY__";
+
+let _gmapsPromise = null;
+function loadGoogleMaps() {
+  if (!GOOGLE_MAPS_API_KEY) return Promise.reject(new Error("Google Maps API key not configured on server"));
+  if (window.google && window.google.maps) return Promise.resolve(window.google);
+  if (_gmapsPromise) return _gmapsPromise;
+  _gmapsPromise = new Promise((resolve, reject) => {
+    const cb = "__gmapsCb_" + Date.now();
+    window[cb] = () => { resolve(window.google); delete window[cb]; };
+    const s = document.createElement("script");
+    s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(GOOGLE_MAPS_API_KEY)
+          + "&libraries=places&callback=" + cb;
+    s.async = true; s.defer = true;
+    s.onerror = () => reject(new Error("Failed to load Google Maps"));
+    document.head.appendChild(s);
+  });
+  return _gmapsPromise;
+}
 
 const state = {
   token: localStorage.getItem("admin_token") || null,
@@ -334,35 +353,86 @@ async function renderStations(container) {
   refresh();
 }
 function renderStationCreateForm(after) {
-  const isAdmin = state.user && state.user.role === "ADMIN";
-  const fields = [
-    el("input", { id: "snm", type: "text", placeholder: "Name" }),
-    el("input", { id: "sad", type: "text", placeholder: "Address" }),
-    el("input", { id: "slt", type: "number", placeholder: "Latitude", step: "0.000001" }),
-    el("input", { id: "sln", type: "number", placeholder: "Longitude", step: "0.000001" }),
-    el("input", { id: "soh", type: "text", placeholder: "Operating hours (default 24/7)" }),
-    el("input", { id: "sam", type: "text", placeholder: "Amenities (comma-separated)" }),
-  ];
-  if (isAdmin) {
-    fields.push(el("input", { id: "sop", type: "text", placeholder: "Operator user ID (UUID)" }));
-  }
-  fields.push(el("button", { class: "action", onclick: async () => {
-    const amRaw = document.getElementById("sam").value.trim();
-    const ohRaw = document.getElementById("soh").value.trim();
-    const opRaw = isAdmin ? document.getElementById("sop").value.trim() : "";
+  const nm = el("input", { id: "snm", type: "text", placeholder: "Name" });
+  const ad = el("input", { id: "sad", type: "text", placeholder: "Address (click map to autofill)", style: "flex:1;min-width:240px" });
+  const lt = el("input", { id: "slt", type: "number", placeholder: "Latitude", step: "0.000001", readonly: "readonly" });
+  const ln = el("input", { id: "sln", type: "number", placeholder: "Longitude", step: "0.000001", readonly: "readonly" });
+  const oh = el("input", { id: "soh", type: "text", placeholder: "Operating hours (default 24/7)" });
+  const am = el("input", { id: "sam", type: "text", placeholder: "Amenities (comma-separated)" });
+  const search = el("input", { id: "smq", type: "text", placeholder: "Search a place...", style: "flex:1;min-width:240px" });
+  const mapDiv = el("div", { id: "smap", style: "width:100%;height:360px;border:1px solid var(--line);border-radius:6px;margin-top:8px;background:#0b1220" });
+  const hint = el("div", { style: "color:var(--muted);font-size:12px;margin-top:6px" },
+    GOOGLE_MAPS_API_KEY ? "Click on the map to set the station location. Address will be auto-filled." : "Map disabled — GOOGLE_MAPS_API_KEY not configured on server. Enter lat/lng manually.");
+
+  const submit = el("button", { class: "action", onclick: async () => {
+    const amRaw = am.value.trim();
+    const ohRaw = oh.value.trim();
+    const latVal = Number(lt.value);
+    const lngVal = Number(ln.value);
+    if (!Number.isFinite(latVal) || !Number.isFinite(lngVal)) { alert("Pick a location on the map"); return; }
     const body = {
-      name: document.getElementById("snm").value.trim(),
-      address: document.getElementById("sad").value.trim(),
-      latitude: Number(document.getElementById("slt").value),
-      longitude: Number(document.getElementById("sln").value),
+      name: nm.value.trim(),
+      address: ad.value.trim(),
+      latitude: latVal,
+      longitude: lngVal,
       ...(ohRaw ? { operatingHours: ohRaw } : {}),
       ...(amRaw ? { amenities: amRaw.split(",").map(s => s.trim()).filter(Boolean) } : {}),
-      ...(opRaw ? { operatorId: opRaw } : {}),
     };
     try { await api("/admin/stations", { method: "POST", body: JSON.stringify(body) }); after(); }
     catch (e) { alert(e.message); }
-  } }, "Create station"));
-  return el("div", { class: "toolbar" }, ...fields);
+  } }, "Create station");
+
+  if (GOOGLE_MAPS_API_KEY) {
+    lt.removeAttribute("readonly");
+    ln.removeAttribute("readonly");
+    queueMicrotask(() => {
+      loadGoogleMaps().then(google => {
+        const map = new google.maps.Map(mapDiv, {
+          center: { lat: 41.0082, lng: 28.9784 },
+          zoom: 11,
+          mapTypeControl: false,
+          streetViewControl: false,
+        });
+        const geocoder = new google.maps.Geocoder();
+        let marker = null;
+        const setPoint = (pos, fillAddr) => {
+          if (!marker) marker = new google.maps.Marker({ map, position: pos, draggable: true });
+          else marker.setPosition(pos);
+          lt.value = pos.lat.toFixed(6);
+          ln.value = pos.lng.toFixed(6);
+          if (fillAddr) {
+            geocoder.geocode({ location: pos }, (results, status) => {
+              if (status === "OK" && results && results[0]) ad.value = results[0].formatted_address;
+            });
+          }
+          if (!marker.__bound) {
+            marker.__bound = true;
+            marker.addListener("dragend", e => setPoint({ lat: e.latLng.lat(), lng: e.latLng.lng() }, true));
+          }
+        };
+        map.addListener("click", e => setPoint({ lat: e.latLng.lat(), lng: e.latLng.lng() }, true));
+        try {
+          const ac = new google.maps.places.Autocomplete(search, { fields: ["geometry","formatted_address"] });
+          ac.bindTo("bounds", map);
+          ac.addListener("place_changed", () => {
+            const p = ac.getPlace();
+            if (!p.geometry || !p.geometry.location) return;
+            const pos = { lat: p.geometry.location.lat(), lng: p.geometry.location.lng() };
+            map.setCenter(pos); map.setZoom(15);
+            setPoint(pos, false);
+            if (p.formatted_address) ad.value = p.formatted_address;
+          });
+        } catch (_) { /* Places library not available */ }
+      }).catch(e => { mapDiv.textContent = e.message; });
+    });
+  }
+
+  return el("div", {},
+    el("div", { class: "toolbar" }, nm, ad, oh, am),
+    el("div", { class: "toolbar" }, search, lt, ln, submit),
+    mapDiv,
+    hint,
+  );
 }
 async function patchStation(id, body, after) {
   try { await api("/admin/stations/" + id, { method: "PATCH", body: JSON.stringify(body) }); after(); }

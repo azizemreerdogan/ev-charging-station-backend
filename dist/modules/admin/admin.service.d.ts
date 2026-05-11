@@ -89,7 +89,6 @@ export declare function createStation(actor: Actor, body: {
     longitude: number;
     operatingHours?: string;
     amenities?: string[];
-    operatorId?: string;
 }): Promise<{
     name: string;
     id: string;

@@ -6,6 +6,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import rateLimit from "@fastify/rate-limit";
 import { serializerCompiler, validatorCompiler, jsonSchemaTransform, } from "fastify-type-provider-zod";
+import { env } from "../config/env.js";
 import { authPlugin } from "../plugins/auth.js";
 import { authRoutes } from "../modules/auth/auth.routes.js";
 import { userRoutes } from "../modules/users/users.routes.js";
@@ -71,7 +72,8 @@ export async function buildServer() {
     // Server-rendered admin console for ADMIN/OPERATOR roles. The HTML is
     // self-contained and talks to /api/v1/admin/* with a JWT in localStorage.
     app.get("/admin", async (_req, reply) => {
-        return reply.type("text/html; charset=utf-8").send(adminHtml);
+        const html = adminHtml.replace(/__GOOGLE_MAPS_API_KEY__/g, env.GOOGLE_MAPS_API_KEY ?? "");
+        return reply.type("text/html; charset=utf-8").send(html);
     });
     app.addHook("onClose", async () => {
         await prisma.$disconnect();
