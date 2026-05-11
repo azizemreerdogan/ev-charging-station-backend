@@ -148,28 +148,9 @@ export async function listStations(actor, filters) {
 }
 export async function createStation(actor, body) {
     assertAdminOrOperator(actor);
-    let operatorId;
-    if (actor.role === "OPERATOR") {
-        operatorId = actor.userId;
-    }
-    else {
-        if (!body.operatorId) {
-            throw new ConflictError("operatorId is required when creating a station as ADMIN");
-        }
-        const op = await prisma.user.findUnique({
-            where: { id: body.operatorId },
-            select: { id: true, role: true, status: true },
-        });
-        if (!op)
-            throw new NotFoundError("Operator");
-        if (op.role !== "OPERATOR" && op.role !== "ADMIN") {
-            throw new ConflictError("Assigned user is not an OPERATOR");
-        }
-        operatorId = op.id;
-    }
     return prisma.chargingStation.create({
         data: {
-            operatorId,
+            operatorId: actor.userId,
             name: body.name,
             address: body.address,
             latitude: body.latitude,

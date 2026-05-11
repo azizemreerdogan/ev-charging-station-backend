@@ -51,7 +51,6 @@ export declare const stationCreateSchema: z.ZodObject<{
     longitude: z.ZodNumber;
     operatingHours: z.ZodOptional<z.ZodString>;
     amenities: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    operatorId: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const stationPatchSchema: z.ZodObject<{
     name: z.ZodOptional<z.ZodString>;

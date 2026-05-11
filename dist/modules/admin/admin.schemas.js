@@ -29,7 +29,6 @@ export const stationCreateSchema = z.object({
     longitude: z.number().min(-180).max(180),
     operatingHours: z.string().min(1).max(120).optional(),
     amenities: z.array(z.string().max(40)).max(20).optional(),
-    operatorId: z.string().uuid().optional(),
 });
 export const stationPatchSchema = z
     .object({
